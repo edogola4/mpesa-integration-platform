@@ -11,8 +11,7 @@
       "install-all": "npm install && cd server && npm install && cd ../client && npm install",
       "build": "cd client && npm run build",
       "test": "cd server && npm test && cd ../client && npm test",
-      "lint": "cd server && npm run lint && cd ../client && npm run lint",
-      "prepare": "husky install"
+      "lint": "cd server && npm run lint && cd ../client && npm run lint"
     },
     "keywords": [
       "mpesa",
@@ -24,8 +23,8 @@
     "author": "bran don",
     "license": "MIT",
     "devDependencies": {
-      "concurrently": "^8.2.1",
-      "husky": "^8.0.3"
+      "concurrently": "^9.1.2",
+      "husky": "^9.1.7"
     },
     "engines": {
       "node": ">=14.0.0",
