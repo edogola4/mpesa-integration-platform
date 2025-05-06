@@ -4,38 +4,41 @@
     "description": "A seamless integration platform for M-Pesa payment services across East Africa",
     "main": "index.js",
     "scripts": {
-      "start": "node server/src/app.js",
-      "server": "cd server && npm run dev",
-      "client": "cd client && npm start",
-      "dev": "concurrently \"npm run server\" \"npm run client\"",
-      "install-all": "npm install && cd server && npm install && cd ../client && npm install",
-      "build": "cd client && npm run build",
-      "test": "cd server && npm test && cd ../client && npm test",
-      "lint": "cd server && npm run lint && cd ../client && npm run lint"
+        "start": "node server/src/app.js",
+        "server": "cd server && npm run dev",
+        "client": "cd client && npm start",
+        "dev": "concurrently \"npm run server\" \"npm run client\"",
+        "install-all": "npm install && cd server && npm install && cd ../client && npm install",
+        "build": "cd client && npm run build",
+        "test": "cd server && npm test && cd ../client && npm test",
+        "lint": "cd server && npm run lint && cd ../client && npm run lint"
     },
     "keywords": [
-      "mpesa",
-      "payments",
-      "africa",
-      "integration",
-      "api"
+        "mpesa",
+        "payments",
+        "africa",
+        "integration",
+        "api"
     ],
     "author": "bran don",
     "license": "MIT",
     "devDependencies": {
-      "concurrently": "^9.1.2",
-      "husky": "^9.1.7"
+        "concurrently": "^9.1.2",
+        "husky": "^9.1.7"
     },
     "engines": {
-      "node": ">=14.0.0",
-      "npm": ">=6.0.0"
+        "node": ">=14.0.0",
+        "npm": ">=6.0.0"
     },
     "repository": {
-      "type": "git",
-      "url": "git+https://github.com/yourusername/mpesa-integration-platform.git"
+        "type": "git",
+        "url": "git+https://github.com/yourusername/mpesa-integration-platform.git"
     },
     "bugs": {
-      "url": "https://github.com/yourusername/mpesa-integration-platform/issues"
+        "url": "https://github.com/yourusername/mpesa-integration-platform/issues"
     },
-    "homepage": "https://github.com/yourusername/mpesa-integration-platform#readme"
-  }
+    "homepage": "https://github.com/yourusername/mpesa-integration-platform#readme",
+    "dependencies": {
+        "eslint": "^8.57.1"
+    }
+}
