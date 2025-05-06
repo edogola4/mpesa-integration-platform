@@ -1,0 +1,42 @@
+{
+    "name": "mpesa-integration-platform",
+    "version": "1.0.0",
+    "description": "A seamless integration platform for M-Pesa payment services across East Africa",
+    "main": "index.js",
+    "scripts": {
+      "start": "node server/src/app.js",
+      "server": "cd server && npm run dev",
+      "client": "cd client && npm start",
+      "dev": "concurrently \"npm run server\" \"npm run client\"",
+      "install-all": "npm install && cd server && npm install && cd ../client && npm install",
+      "build": "cd client && npm run build",
+      "test": "cd server && npm test && cd ../client && npm test",
+      "lint": "cd server && npm run lint && cd ../client && npm run lint",
+      "prepare": "husky install"
+    },
+    "keywords": [
+      "mpesa",
+      "payments",
+      "africa",
+      "integration",
+      "api"
+    ],
+    "author": "bran don",
+    "license": "MIT",
+    "devDependencies": {
+      "concurrently": "^8.2.1",
+      "husky": "^8.0.3"
+    },
+    "engines": {
+      "node": ">=14.0.0",
+      "npm": ">=6.0.0"
+    },
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/yourusername/mpesa-integration-platform.git"
+    },
+    "bugs": {
+      "url": "https://github.com/yourusername/mpesa-integration-platform/issues"
+    },
+    "homepage": "https://github.com/yourusername/mpesa-integration-platform#readme"
+  }
