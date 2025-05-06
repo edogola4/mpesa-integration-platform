@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:5.0
+    container_name: mpesa-platform-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=mpesa_platform
+    networks:
+      - mpesa-network
+    restart: unless-stopped
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: mpesa-platform-server
+    ports:
+      - "5000:5000"
+    depends_on:
+      - mongodb
+    env_file: .env
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/mpesa_platform
+    volumes:
+      - ./server:/usr/src/app
+      - /usr/src/app/node_modules
+    networks:
+      - mpesa-network
+    restart: unless-stopped
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: mpesa-platform-client
+    ports:
+      - "3000:3000"
+    depends_on:
+      - server
+    env_file: .env
+    environment:
+      - REACT_APP_API_URL=http://localhost:5000/api
+    volumes:
+      - ./client:/usr/src/app
+      - /usr/src/app/node_modules
+    networks:
+      - mpesa-network
+    restart: unless-stopped
+
+networks:
+  mpesa-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
