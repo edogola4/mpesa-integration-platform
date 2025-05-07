@@ -1,4 +1,15 @@
 node_modules
+npm-debug.log
+npm-error.log
+yarn-debug.log
+yarn-error.log
 .git
 .gitignore
-npm-debug.log
+.npmrc
+.vscode
+.idea
+*.md
+.DS_Store
+build
+dist
+coverage
