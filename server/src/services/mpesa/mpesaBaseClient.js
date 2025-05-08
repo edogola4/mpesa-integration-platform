@@ -1,18 +1,27 @@
 //server/src/services/mpesa/mpesaBaseClient.js
 const axios = require('axios');
 const logger = require('../../utils/logger');
+const { AppError } = require('../../utils/appError');
 
 /**
- * Base M-Pesa API client class with common functionality
+ * Base client for M-Pesa API
+ * Contains common functionality shared by country-specific implementations
  */
 class MpesaBaseClient {
   /**
    * @param {object} config - Configuration object
    */
   constructor(config) {
-    this.config = config;
+    this.environment = config.environment || 'sandbox';
+    
+    // Set base URL based on environment
+    const baseURL = this.environment === 'production' 
+      ? 'https://api.safaricom.co.ke' 
+      : 'https://sandbox.safaricom.co.ke';
+    
+    // Initialize axios instance with common configs
     this.axios = axios.create({
-      baseURL: config.baseUrl,
+      baseURL,
       timeout: 30000, // 30 seconds
       headers: {
         'Content-Type': 'application/json',
@@ -20,45 +29,17 @@ class MpesaBaseClient {
       }
     });
     
-    // Add request interceptor for logging
-    this.axios.interceptors.request.use(
-      (config) => {
-        logger.debug(`API Request to ${config.url}`, { 
-          method: config.method.toUpperCase(),
-          headers: config.headers
-        });
-        return config;
-      },
-      (error) => {
-        logger.error('API Request Error:', error);
-        return Promise.reject(error);
-      }
-    );
-    
     // Add response interceptor for logging
     this.axios.interceptors.response.use(
-      (response) => {
-        logger.debug(`API Response from ${response.config.url}`, {
-          status: response.status,
-          statusText: response.statusText
-        });
+      response => {
+        logger.debug(`M-Pesa API Response: ${JSON.stringify(response.data)}`);
         return response;
       },
-      (error) => {
+      error => {
         if (error.response) {
-          logger.error(`API Error Response: ${error.response.status}`, {
-            data: error.response.data,
-            status: error.response.status,
-            headers: error.response.headers
-          });
-        } else if (error.request) {
-          logger.error('API No Response Received', {
-            request: error.request
-          });
+          logger.error(`M-Pesa API Error: ${JSON.stringify(error.response.data)}`);
         } else {
-          logger.error('API Request Setup Error', {
-            message: error.message
-          });
+          logger.error(`M-Pesa API Error: ${error.message}`);
         }
         return Promise.reject(error);
       }
@@ -66,12 +47,11 @@ class MpesaBaseClient {
   }
   
   /**
-   * Get current timestamp in the format YYYYMMDDHHmmss
+   * Generate timestamp in the format required by M-Pesa API (YYYYMMDDHHmmss)
    * @returns {string} - Formatted timestamp
    */
   getTimestamp() {
     const date = new Date();
-    
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
@@ -83,46 +63,36 @@ class MpesaBaseClient {
   }
   
   /**
-   * Handle API errors consistently
-   * @param {Error} error - The error from API call
-   * @throws {Error} - Enhanced error with additional context
+   * Handle M-Pesa API errors
+   * @param {Error} error - Error object
+   * @throws {AppError} - Custom error with appropriate status code and message
    */
   handleApiError(error) {
     if (error.response) {
       // The request was made and the server responded with a status code
       // that falls out of the range of 2xx
-      const responseData = error.response.data;
-      const status = error.response.status;
+      const statusCode = error.response.status;
+      const errorMessage = error.response.data.errorMessage || 
+                         error.response.data.errorDesc || 
+                         error.response.data.message || 
+                         'M-Pesa API error';
       
-      const errorMessage = responseData.errorMessage || 
-                           responseData.message || 
-                           responseData.error_description ||
-                           responseData.errorDescription ||
-                           'Unknown API error';
-      
-      const enhancedError = new Error(`M-Pesa API Error (${status}): ${errorMessage}`);
-      enhancedError.status = status;
-      enhancedError.response = responseData;
-      
-      throw enhancedError;
+      throw new AppError(errorMessage, statusCode);
     } else if (error.request) {
       // The request was made but no response was received
-      throw new Error('No response received from M-Pesa API. Please check your network connection.');
+      throw new AppError('No response received from M-Pesa API', 503);
     } else {
-      // Something happened in setting up the request that triggered an Error
-      throw new Error(`Error setting up request: ${error.message}`);
+      // Something happened in setting up the request
+      throw new AppError(`M-Pesa API request failed: ${error.message}`, 500);
     }
   }
   
   /**
-   * Generate a unique transaction reference
-   * @param {string} prefix - Prefix for the reference
-   * @returns {string} - Unique reference
+   * Common method to authenticate with the M-Pesa API
+   * To be implemented by country-specific subclasses
    */
-  generateReference(prefix = 'TX') {
-    const timestamp = Date.now().toString();
-    const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-    return `${prefix}_${timestamp}_${random}`;
+  async authenticate() {
+    throw new AppError('authenticate() method must be implemented by subclass', 500);
   }
 }
 
