@@ -1,207 +1,204 @@
 //server/src/models/business.model.js
-
 const mongoose = require('mongoose');
 const crypto = require('crypto');
 
+// API Key schema (as a sub-document)
+const apiKeySchema = new mongoose.Schema({
+  key: { 
+    type: String,
+    required: true 
+  },
+  secret: { 
+    type: String,
+    required: true,
+    select: false // Don't include secret in query results by default
+  },
+  name: { 
+    type: String,
+    required: [true, 'API key name is required'],
+    trim: true
+  },
+  isActive: { 
+    type: Boolean,
+    default: true 
+  },
+  createdAt: { 
+    type: Date,
+    default: Date.now 
+  },
+  lastUsed: Date
+});
+
+// M-Pesa Integration schema (as a sub-document)
+const mpesaIntegrationSchema = new mongoose.Schema({
+  country: { 
+    type: String, 
+    required: [true, 'Country is required'],
+    enum: ['kenya', 'tanzania', 'uganda', 'rwanda', 'mozambique', 'drc'],
+    lowercase: true
+  },
+  shortCode: { 
+    type: String, 
+    required: [true, 'Short code is required']
+  },
+  consumerKey: { 
+    type: String, 
+    required: [true, 'Consumer key is required'],
+    select: false // Don't include in query results by default
+  },
+  consumerSecret: { 
+    type: String, 
+    required: [true, 'Consumer secret is required'],
+    select: false // Don't include in query results by default
+  },
+  passkey: { 
+    type: String,
+    select: false // Don't include in query results by default
+  },
+  isLive: { 
+    type: Boolean, 
+    default: false 
+  },
+  initiationUrl: String,
+  callbackUrl: String,
+  timeoutUrl: String,
+  resultUrl: String,
+  createdAt: { 
+    type: Date, 
+    default: Date.now 
+  },
+  updatedAt: { 
+    type: Date, 
+    default: Date.now 
+  }
+});
+
+// Business schema
 const businessSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
-    trim: true,
+  name: { 
+    type: String, 
+    required: [true, 'Business name is required'],
+    trim: true
   },
-  owner: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true,
-  },
-  apiKeys: [{
-    key: {
-      type: String,
-      unique: true,
-    },
-    secret: {
-      type: String,
-      select: false, // Don't return secret by default
-    },
-    name: {
-      type: String,
-      default: 'Default',
-    },
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
-    lastUsed: Date,
-    createdAt: {
-      type: Date,
-      default: Date.now,
-    },
-  }],
-  webhookUrl: {
+  description: {
     type: String,
-    trim: true,
+    trim: true
+  },
+  owner: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'User', 
+    required: true 
+  },
+  logo: {
+    type: String // URL to logo image
+  },
+  website: {
+    type: String,
+    trim: true
+  },
+  apiKeys: [apiKeySchema],
+  webhookUrl: { 
+    type: String,
+    trim: true 
   },
   webhookSecret: {
     type: String,
-    select: false, // Don't return webhook secret by default
+    select: false // Don't include in query results by default
   },
-  notificationEmail: {
+  notificationEmail: { 
     type: String,
-    trim: true,
+    trim: true 
   },
-  notificationPhone: {
+  notificationPhone: { 
     type: String,
-    trim: true,
+    trim: true 
   },
-  mpesaIntegrations: [{
-    country: {
-      type: String,
-      required: true,
-      enum: ['kenya', 'tanzania', 'uganda', 'rwanda', 'mozambique', 'drc'],
-    },
-    shortCode: {
-      type: String,
-      required: true,
-    },
-    consumerKey: {
-      type: String,
-      required: true,
-      select: false, // Don't return consumer key by default
-    },
-    consumerSecret: {
-      type: String,
-      required: true,
-      select: false, // Don't return consumer secret by default
-    },
-    passkey: {
-      type: String,
-      select: false, // Don't return passkey by default
-    },
-    environment: {
-      type: String,
-      enum: ['sandbox', 'production'],
-      default: 'sandbox',
-    },
-    callbackUrl: {
-      type: String,
-      trim: true,
-    },
-    timeoutUrl: {
-      type: String,
-      trim: true,
-    },
-    resultUrl: {
-      type: String,
-      trim: true,
-    },
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
-  }],
-  settings: {
-    autoConfirmation: {
-      type: Boolean,
-      default: true,
-    },
-    notifyOnSuccess: {
-      type: Boolean,
-      default: true,
-    },
-    notifyOnFailure: {
-      type: Boolean,
-      default: true,
-    },
-    webhookTimeout: {
-      type: Number,
-      default: 15000, // 15 seconds
-    },
+  mpesaIntegrations: [mpesaIntegrationSchema],
+  isActive: {
+    type: Boolean,
+    default: true
   },
-  createdAt: {
-    type: Date,
-    default: Date.now,
+  createdAt: { 
+    type: Date, 
+    default: Date.now 
   },
-  updatedAt: {
-    type: Date,
-    default: Date.now,
-  },
+  updatedAt: { 
+    type: Date, 
+    default: Date.now 
+  }
+}, {
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true },
+  timestamps: true
 });
 
-/**
- * Generate API key and secret
- * @returns {Object} Object containing key and secret
- */
-businessSchema.methods.generateApiKey = function () {
-  const key = `key_${crypto.randomBytes(16).toString('hex')}`;
-  const secret = `secret_${crypto.randomBytes(32).toString('hex')}`;
-  
-  this.apiKeys.push({
-    key,
-    secret,
-    name: `API Key ${this.apiKeys.length + 1}`,
-    createdAt: Date.now(),
-  });
-  
-  return { key, secret };
-};
-
-/**
- * Generate webhook secret
- * @returns {string} Webhook secret
- */
-businessSchema.methods.generateWebhookSecret = function () {
-  const secret = `whsec_${crypto.randomBytes(24).toString('hex')}`;
-  this.webhookSecret = secret;
-  return secret;
-};
-
-/**
- * Find business by API key
- * @param {string} apiKey - The API key to search for
- * @returns {Promise<Business>} Business document
- */
-businessSchema.statics.findByApiKey = async function (apiKey) {
-  return this.findOne({
-    'apiKeys.key': apiKey,
-    'apiKeys.isActive': true,
-  }).select('+apiKeys.secret');
-};
-
-/**
- * Verify API key and secret
- * @param {string} apiKey - The API key
- * @param {string} apiSecret - The API secret
- * @returns {Promise<boolean>} Whether the key and secret are valid
- */
-businessSchema.statics.verifyApiCredentials = async function (apiKey, apiSecret) {
-  const business = await this.findOne({
-    'apiKeys.key': apiKey,
-    'apiKeys.isActive': true,
-  }).select('+apiKeys.secret');
-  
-  if (!business) return false;
-  
-  const keyObject = business.apiKeys.find(k => k.key === apiKey);
-  if (!keyObject) return false;
-  
-  // Update last used timestamp
-  await this.updateOne(
-    { 'apiKeys.key': apiKey },
-    { $set: { 'apiKeys.$.lastUsed': new Date() } }
-  );
-  
-  return keyObject.secret === apiSecret;
-};
-
-/**
- * Update timestamps before saving
- */
-businessSchema.pre('save', function (next) {
+// Update the updatedAt field on save
+businessSchema.pre('save', function(next) {
   this.updatedAt = Date.now();
   next();
 });
 
-// Create the Business model
+/**
+ * Generate a new API key pair
+ * @param {string} name - Name for the API key
+ * @returns {object} - Object containing key and secret
+ */
+businessSchema.methods.generateApiKey = function(name) {
+  // Generate random key and secret
+  const key = `mp_${crypto.randomBytes(16).toString('hex')}`;
+  const secret = crypto.randomBytes(32).toString('hex');
+  
+  // Hash the secret for storage
+  const hashedSecret = crypto
+    .createHash('sha256')
+    .update(secret)
+    .digest('hex');
+  
+  // Add to API keys array
+  this.apiKeys.push({
+    key,
+    secret: hashedSecret,
+    name,
+    isActive: true,
+    createdAt: Date.now()
+  });
+  
+  // Return the unhashed values to be shown to the user once
+  return { key, secret };
+};
+
+/**
+ * Generate a webhook secret
+ * @returns {string} - Webhook secret
+ */
+businessSchema.methods.generateWebhookSecret = function() {
+  const secret = crypto.randomBytes(32).toString('hex');
+  
+  // Hash the secret for storage
+  this.webhookSecret = crypto
+    .createHash('sha256')
+    .update(secret)
+    .digest('hex');
+  
+  // Return the unhashed value to be shown to the user once
+  return secret;
+};
+
+/**
+ * Verify a webhook signature
+ * @param {string} signature - Signature from request header
+ * @param {string} body - Request body as string
+ * @returns {boolean} - True if signature is valid
+ */
+businessSchema.methods.verifyWebhookSignature = function(signature, body) {
+  const computedSignature = crypto
+    .createHmac('sha256', this.webhookSecret)
+    .update(body)
+    .digest('hex');
+  
+  return signature === computedSignature;
+};
+
 const Business = mongoose.model('Business', businessSchema);
 
 module.exports = Business;
