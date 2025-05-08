@@ -3,68 +3,49 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
-const mongoSanitize = require('express-mongo-sanitize');
-const xss = require('xss-clean');
-const compression = require('compression');
-const rateLimit = require('express-rate-limit');
-const passport = require('./config/passport');
-const routes = require('./routes');
-const { errorHandler } = require('./middleware/error.middleware');
-const logger = require('./config/logger');
+const { errorHandler } = require('./middleware/errorHandler');
+const { notFound } = require('./middleware/notFound');
+const config = require('./config/config');
 
-// Initialize express app
+// Import routes
+const authRoutes = require('./routes/auth.routes');
+const businessRoutes = require('./routes/business.routes');
+const transactionRoutes = require('./routes/transaction.routes');
+const webhookRoutes = require('./routes/webhook.routes');
+const apiKeyRoutes = require('./routes/apiKey.routes');
+const integrationRoutes = require('./routes/integration.routes');
+
+// Initialize Express app
 const app = express();
 
-// Set security HTTP headers
-app.use(helmet());
-
-// Enable CORS
-app.use(cors());
-
-// Parse JSON request body
-app.use(express.json({ limit: '10kb' }));
-
-// Parse URL-encoded request body
-app.use(express.urlencoded({ extended: true, limit: '10kb' }));
-
-// Sanitize request data against NoSQL injection
-app.use(mongoSanitize());
-
-// Sanitize request data against XSS
-app.use(xss());
-
-// Compress responses
-app.use(compression());
-
-// HTTP request logger
-if (process.env.NODE_ENV !== 'test') {
-  app.use(morgan('dev', {
-    stream: {
-      write: (message) => logger.http(message.trim())
-    }
-  }));
-}
-
-// API rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    status: 'error',
-    message: 'Too many requests, please try again later'
-  }
-});
-app.use('/api', limiter);
-
-// Initialize Passport
-app.use(passport.initialize());
+// Middleware
+app.use(helmet()); // Set security HTTP headers
+app.use(morgan(config.nodeEnv === 'development' ? 'dev' : 'combined')); // HTTP request logger
+app.use(cors({
+  origin: config.corsOrigin,
+  optionsSuccessStatus: 200,
+}));
+app.use(express.json()); // Parse JSON request body
+app.use(express.urlencoded({ extended: true })); // Parse URL-encoded request body
 
 // API routes
-app.use('/api', routes);
+app.use('/api/auth', authRoutes);
+app.use('/api/businesses', businessRoutes);
+app.use('/api/transactions', transactionRoutes);
+app.use('/api/webhooks', webhookRoutes);
+app.use('/api/businesses/:businessId/api-keys', apiKeyRoutes);
+app.use('/api/businesses/:businessId/integrations', integrationRoutes);
 
-// Error handler
+// API documentation route (we'll implement this later)
+app.use('/api/docs', express.static('docs/api'));
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok', message: 'Server is running' });
+});
+
+// Error handling
+app.use(notFound);
 app.use(errorHandler);
 
 module.exports = app;
