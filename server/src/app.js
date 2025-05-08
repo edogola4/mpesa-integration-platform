@@ -1,102 +1,70 @@
+// server/src/app.js
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const xss = require('xss-clean');
-const mongoSanitize = require('express-mongo-sanitize');
-const compression = require('compression');
 const morgan = require('morgan');
-const path = require('path');
-const httpStatus = require('http-status');
-const passport = require('passport');
-const { jwtStrategy } = require('./config/passport');
+const mongoSanitize = require('express-mongo-sanitize');
+const xss = require('xss-clean');
+const compression = require('compression');
+const rateLimit = require('express-rate-limit');
+const passport = require('./config/passport');
 const routes = require('./routes');
-const { errorConverter, errorHandler } = require('./middleware/error');
+const { errorHandler } = require('./middleware/error.middleware');
 const logger = require('./config/logger');
 
-// Load environment variables
-require('dotenv').config();
-
-// Connect to MongoDB
-require('./config/mongoose');
-
-// Initialize Express app
+// Initialize express app
 const app = express();
 
 // Set security HTTP headers
 app.use(helmet());
 
+// Enable CORS
+app.use(cors());
+
 // Parse JSON request body
-app.use(express.json());
+app.use(express.json({ limit: '10kb' }));
 
 // Parse URL-encoded request body
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
-// Sanitize request data to prevent XSS attacks
-app.use(xss());
-
-// Sanitize request data to prevent MongoDB operator injection
+// Sanitize request data against NoSQL injection
 app.use(mongoSanitize());
 
-// gzip compression
+// Sanitize request data against XSS
+app.use(xss());
+
+// Compress responses
 app.use(compression());
 
-// Enable CORS
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
-  credentials: true,
-}));
-
-// JWT authentication
-app.use(passport.initialize());
-passport.use('jwt', jwtStrategy);
-
-// Request logging
+// HTTP request logger
 if (process.env.NODE_ENV !== 'test') {
-  app.use(morgan('dev'));
+  app.use(morgan('dev', {
+    stream: {
+      write: (message) => logger.http(message.trim())
+    }
+  }));
 }
+
+// API rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    status: 'error',
+    message: 'Too many requests, please try again later'
+  }
+});
+app.use('/api', limiter);
+
+// Initialize Passport
+app.use(passport.initialize());
 
 // API routes
 app.use('/api', routes);
 
-// Serve API documentation
-if (process.env.NODE_ENV !== 'production') {
-  app.use('/api-docs', require('./config/swagger'));
-}
-
-// Serve static files in production
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../../client/build')));
-  
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../../client/build', 'index.html'));
-  });
-}
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.status(httpStatus.OK).send({ status: 'ok' });
-});
-
-// 404 handler
-app.use((req, res) => {
-  res.status(httpStatus.NOT_FOUND).json({
-    success: false,
-    message: 'Not Found',
-    error: `${req.originalUrl} not found`
-  });
-});
-
-// Convert errors to API response format
-app.use(errorConverter);
-
-// Handle errors
+// Error handler
 app.use(errorHandler);
-
-// Start server
-const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => {
-  logger.info(`Server running on port ${PORT}`);
-});
 
 module.exports = app;
