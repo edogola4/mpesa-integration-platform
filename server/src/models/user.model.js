@@ -1,152 +1,169 @@
+//server/src/models/user.model.js
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 
 const userSchema = new mongoose.Schema({
-  email: {
-    type: String,
-    required: true,
+  email: { 
+    type: String, 
+    required: [true, 'Email is required'],
     unique: true,
-    trim: true,
     lowercase: true,
-    match: [/^\S+@\S+\.\S+$/, 'Please enter a valid email address'],
-  },
-  password: {
-    type: String,
-    required: true,
-    minlength: 8,
-    select: false, // Don't return password by default
-  },
-  firstName: {
-    type: String,
-    required: true,
     trim: true,
+    match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email address']
   },
-  lastName: {
-    type: String,
-    required: true,
-    trim: true,
+  password: { 
+    type: String, 
+    required: [true, 'Password is required'],
+    minlength: [8, 'Password must be at least 8 characters long'],
+    select: false // Don't include password in query results by default
   },
-  role: {
-    type: String,
+  firstName: { 
+    type: String, 
+    required: [true, 'First name is required'],
+    trim: true
+  },
+  lastName: { 
+    type: String, 
+    required: [true, 'Last name is required'],
+    trim: true
+  },
+  role: { 
+    type: String, 
     enum: ['admin', 'business', 'developer'],
-    default: 'business',
+    default: 'business'
   },
-  company: {
+  company: { 
     type: String,
-    trim: true,
+    trim: true
   },
-  phone: {
+  phone: { 
     type: String,
-    trim: true,
+    trim: true
   },
-  isVerified: {
-    type: Boolean,
-    default: false,
+  isVerified: { 
+    type: Boolean, 
+    default: false
   },
   verificationToken: String,
-  verificationExpires: Date,
+  verificationTokenExpires: Date,
+  twoFactorEnabled: { 
+    type: Boolean, 
+    default: false
+  },
+  twoFactorSecret: { 
+    type: String,
+    select: false // Don't include 2FA secret in query results by default
+  },
   passwordResetToken: String,
   passwordResetExpires: Date,
   passwordChangedAt: Date,
-  twoFactorEnabled: {
-    type: Boolean,
-    default: false,
+  createdAt: { 
+    type: Date, 
+    default: Date.now
   },
-  twoFactorSecret: {
-    type: String,
-    select: false, // Don't return 2FA secret by default
-  },
-  lastLogin: Date,
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now,
-  },
-});
-
-/**
- * Hash the password before saving
- */
-userSchema.pre('save', async function (next) {
-  // Only hash the password if it has been modified (or is new)
-  if (!this.isModified('password')) return next();
-
-  try {
-    // Generate a salt
-    const salt = await bcrypt.genSalt(10);
-    
-    // Hash the password with the salt
-    this.password = await bcrypt.hash(this.password, salt);
-    
-    // If password is changed, update the passwordChangedAt field
-    if (!this.isNew) {
-      this.passwordChangedAt = Date.now() - 1000; // Subtract 1 second for buffer
-    }
-    
-    return next();
-  } catch (error) {
-    return next(error);
+  updatedAt: { 
+    type: Date, 
+    default: Date.now
   }
+}, {
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true },
+  timestamps: true
 });
 
-/**
- * Check if entered password is correct
- * @param {string} candidatePassword - The password to check
- * @returns {Promise<boolean>}
- */
-userSchema.methods.isPasswordMatch = async function (candidatePassword) {
-  return bcrypt.compare(candidatePassword, this.password);
-};
-
-/**
- * Generate JWT token for user
- * @returns {string} JWT token
- */
-userSchema.methods.generateAuthToken = function () {
-  return jwt.sign(
-    {
-      sub: this._id,
-      role: this.role,
-      email: this.email,
-      iat: Math.floor(Date.now() / 1000),
-    },
-    process.env.JWT_SECRET || 'your_jwt_secret_key_here',
-    {
-      expiresIn: process.env.JWT_EXPIRATION || '7d',
-    }
-  );
-};
-
-/**
- * Generate refresh token for user
- * @returns {string} Refresh token
- */
-userSchema.methods.generateRefreshToken = function () {
-  return jwt.sign(
-    {
-      sub: this._id,
-      type: 'refresh',
-      iat: Math.floor(Date.now() / 1000),
-    },
-    process.env.JWT_SECRET || 'your_jwt_secret_key_here',
-    {
-      expiresIn: process.env.JWT_REFRESH_EXPIRATION || '30d',
-    }
-  );
-};
-
-/**
- * Get user's full name
- */
-userSchema.virtual('fullName').get(function () {
+// Virtual property for full name
+userSchema.virtual('fullName').get(function() {
   return `${this.firstName} ${this.lastName}`;
 });
 
-// Create the User model
+// Pre-save middleware to hash password
+userSchema.pre('save', async function(next) {
+  // Only hash the password if it has been modified
+  if (!this.isModified('password')) return next();
+  
+  // Hash the password with a cost factor of 12
+  this.password = await bcrypt.hash(this.password, 12);
+  
+  // If this is a password change (not a new user), update passwordChangedAt
+  if (!this.isNew) {
+    this.passwordChangedAt = Date.now() - 1000; // Subtract 1 second for potential processing delays
+  }
+  
+  next();
+});
+
+// Update the updatedAt field on save
+userSchema.pre('save', function(next) {
+  this.updatedAt = Date.now();
+  next();
+});
+
+/**
+ * Compare provided password with stored password hash
+ * @param {string} candidatePassword - Password to check
+ * @param {string} userPassword - Stored password hash
+ * @returns {Promise<boolean>} - True if passwords match
+ */
+userSchema.methods.correctPassword = async function(candidatePassword, userPassword) {
+  return await bcrypt.compare(candidatePassword, userPassword);
+};
+
+/**
+ * Check if password was changed after a given timestamp
+ * @param {number} JWTTimestamp - JWT issued timestamp
+ * @returns {boolean} - True if password was changed after token issuance
+ */
+userSchema.methods.changedPasswordAfter = function(JWTTimestamp) {
+  if (this.passwordChangedAt) {
+    const changedTimestamp = parseInt(this.passwordChangedAt.getTime() / 1000, 10);
+    return JWTTimestamp < changedTimestamp;
+  }
+  return false;
+};
+
+/**
+ * Create password reset token
+ * @returns {string} - Reset token
+ */
+userSchema.methods.createPasswordResetToken = function() {
+  // Generate random token
+  const resetToken = crypto.randomBytes(32).toString('hex');
+  
+  // Hash token and store in database
+  this.passwordResetToken = crypto
+    .createHash('sha256')
+    .update(resetToken)
+    .digest('hex');
+  
+  // Set expiration (10 minutes)
+  this.passwordResetExpires = Date.now() + 10 * 60 * 1000;
+  
+  // Return original token (not the hash)
+  return resetToken;
+};
+
+/**
+ * Create email verification token
+ * @returns {string} - Verification token
+ */
+userSchema.methods.createVerificationToken = function() {
+  // Generate random token
+  const verificationToken = crypto.randomBytes(32).toString('hex');
+  
+  // Hash token and store in database
+  this.verificationToken = crypto
+    .createHash('sha256')
+    .update(verificationToken)
+    .digest('hex');
+  
+  // Set expiration (24 hours)
+  this.verificationTokenExpires = Date.now() + 24 * 60 * 60 * 1000;
+  
+  // Return original token (not the hash)
+  return verificationToken;
+};
+
 const User = mongoose.model('User', userSchema);
 
 module.exports = User;
