@@ -14,6 +14,7 @@ const transactionRoutes = require('./routes/transaction.routes');
 const webhookRoutes = require('./routes/webhook.routes');
 const apiKeyRoutes = require('./routes/apiKey.routes');
 const integrationRoutes = require('./routes/integration.routes');
+const authRoutes = require('./routes/authRoutes');
 
 // Initialize Express app
 const app = express();
