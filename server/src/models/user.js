@@ -1,8 +1,9 @@
 // server/src/models/user.js
-
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const config = require('../config');
 
 const userSchema = new mongoose.Schema({
   email: { 
@@ -11,18 +12,13 @@ const userSchema = new mongoose.Schema({
     unique: true,
     lowercase: true,
     trim: true,
-    validate: {
-      validator: function(v) {
-        return /^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/.test(v);
-      },
-      message: props => `${props.value} is not a valid email address!`
-    }
+    match: [/^\S+@\S+\.\S+$/, 'Please use a valid email address']
   },
   password: { 
     type: String, 
     required: [true, 'Password is required'],
-    minlength: [8, 'Password must be at least 8 characters long'],
-    select: false // Don't return password by default
+    minlength: [8, 'Password must be at least 8 characters'],
+    select: false // Don't return password in queries by default
   },
   firstName: { 
     type: String, 
@@ -38,7 +34,7 @@ const userSchema = new mongoose.Schema({
     type: String, 
     enum: {
       values: ['admin', 'business', 'developer'],
-      message: '{VALUE} is not a supported role'
+      message: 'Role must be either: admin, business, or developer'
     },
     default: 'business' 
   },
@@ -54,22 +50,8 @@ const userSchema = new mongoose.Schema({
     type: Boolean, 
     default: false 
   },
-  verificationToken: {
-    type: String,
-    select: false
-  },
-  verificationExpires: {
-    type: Date,
-    select: false
-  },
-  passwordResetToken: {
-    type: String,
-    select: false
-  },
-  passwordResetExpires: {
-    type: Date,
-    select: false
-  },
+  verificationToken: String,
+  verificationTokenExpires: Date,
   twoFactorEnabled: { 
     type: Boolean, 
     default: false 
@@ -78,25 +60,9 @@ const userSchema = new mongoose.Schema({
     type: String,
     select: false
   },
-  lastLogin: {
-    type: Date
-  },
-  failedLoginAttempts: {
-    type: Number,
-    default: 0
-  },
-  accountLocked: {
-    type: Boolean,
-    default: false
-  },
-  accountLockedUntil: {
-    type: Date
-  },
-  active: {
-    type: Boolean,
-    default: true,
-    select: false
-  },
+  resetPasswordToken: String,
+  resetPasswordExpires: Date,
+  lastLogin: Date,
   createdAt: { 
     type: Date, 
     default: Date.now 
@@ -106,29 +72,17 @@ const userSchema = new mongoose.Schema({
     default: Date.now 
   }
 }, {
-  timestamps: true, // Automatically update createdAt and updatedAt
-  toJSON: { virtuals: true }, // Include virtuals when document is converted to JSON
-  toObject: { virtuals: true } // Include virtuals when document is converted to Object
+  timestamps: true
 });
 
-// Virtual property for fullName
-userSchema.virtual('fullName').get(function() {
-  return `${this.firstName} ${this.lastName}`;
-});
-
-// Add index for email
-userSchema.index({ email: 1 });
-
-// Pre-save middleware to hash password
+// Pre-save middleware to hash password before saving
 userSchema.pre('save', async function(next) {
   // Only hash the password if it's modified (or new)
   if (!this.isModified('password')) return next();
   
   try {
-    // Generate a salt
+    // Generate salt and hash password
     const salt = await bcrypt.genSalt(10);
-    
-    // Hash the password with the new salt
     this.password = await bcrypt.hash(this.password, salt);
     next();
   } catch (error) {
@@ -136,79 +90,73 @@ userSchema.pre('save', async function(next) {
   }
 });
 
-// Hide sensitive data when converting to JSON
-userSchema.methods.toJSON = function() {
-  const userObject = this.toObject();
-  delete userObject.password;
-  delete userObject.verificationToken;
-  delete userObject.verificationExpires;
-  delete userObject.passwordResetToken;
-  delete userObject.passwordResetExpires;
-  delete userObject.twoFactorSecret;
-  delete userObject.__v;
-  
-  return userObject;
-};
-
-// Method to check if provided password is correct
+// Method to compare password
 userSchema.methods.comparePassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
-// Method to generate JWT token for authentication
+// Method to generate JWT
 userSchema.methods.generateAuthToken = function() {
-  const payload = {
-    id: this._id,
-    email: this.email,
-    role: this.role
-  };
-  
-  // Get JWT secret and expiration from environment variables
-  const secret = process.env.JWT_SECRET || 'your-secret-key';
-  const expiresIn = process.env.JWT_EXPIRES_IN || '1d';
-  
-  // Generate and return the token
-  return jwt.sign(payload, secret, { expiresIn });
+  return jwt.sign(
+    { id: this._id, email: this.email, role: this.role },
+    config.jwt.secret,
+    { expiresIn: config.jwt.expiresIn }
+  );
 };
 
-// Method to generate verification token
-userSchema.methods.generateVerificationToken = function() {
-  // Generate a random token
-  const token = crypto.randomBytes(32).toString('hex');
-  
-  // Hash the token and set it on the user
-  this.verificationToken = crypto
-    .createHash('sha256')
-    .update(token)
-    .digest('hex');
-    
-  // Set expiration (24 hours)
-  this.verificationExpires = Date.now() + 24 * 60 * 60 * 1000;
-  
-  return token;
+// Method to generate refresh token
+userSchema.methods.generateRefreshToken = function() {
+  return jwt.sign(
+    { id: this._id },
+    config.jwt.refreshSecret,
+    { expiresIn: config.jwt.refreshExpiresIn }
+  );
 };
 
 // Method to generate password reset token
 userSchema.methods.generatePasswordResetToken = function() {
-  // Generate a random token
-  const token = crypto.randomBytes(32).toString('hex');
+  // Generate random token
+  const resetToken = crypto.randomBytes(32).toString('hex');
   
-  // Hash the token and set it on the user
-  this.passwordResetToken = crypto
+  // Hash the token and set to resetPasswordToken field
+  this.resetPasswordToken = crypto
     .createHash('sha256')
-    .update(token)
+    .update(resetToken)
     .digest('hex');
     
-  // Set expiration (1 hour)
-  this.passwordResetExpires = Date.now() + 60 * 60 * 1000;
+  // Set expiry (1 hour from now)
+  this.resetPasswordExpires = Date.now() + 3600000;
   
-  return token;
+  // Return the unhashed token (to be sent via email)
+  return resetToken;
 };
 
-// Static method to find user by email
-userSchema.statics.findByEmail = function(email) {
-  return this.findOne({ email: email.toLowerCase() });
+// Method to generate email verification token
+userSchema.methods.generateVerificationToken = function() {
+  // Generate random token
+  const verificationToken = crypto.randomBytes(32).toString('hex');
+  
+  // Hash the token and set to verificationToken field
+  this.verificationToken = crypto
+    .createHash('sha256')
+    .update(verificationToken)
+    .digest('hex');
+    
+  // Set expiry (24 hours from now)
+  this.verificationTokenExpires = Date.now() + 86400000;
+  
+  // Return the unhashed token (to be sent via email)
+  return verificationToken;
 };
+
+// Create a virtual field for fullName
+userSchema.virtual('fullName').get(function() {
+  return `${this.firstName} ${this.lastName}`;
+});
+
+// Ensure virtual fields are included when converting to JSON
+userSchema.set('toJSON', { virtuals: true });
+userSchema.set('toObject', { virtuals: true });
 
 const User = mongoose.model('User', userSchema);
 
