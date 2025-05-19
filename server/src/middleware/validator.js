@@ -1,39 +1,29 @@
+// server/src/middleware/validator.js
 const { validationResult } = require('express-validator');
 const httpStatus = require('http-status');
 
 /**
- * Middleware to validate request data based on defined validation rules
- * Uses express-validator to validate requests
- * @param {Array} validations - Array of express-validator validation rules
- * @returns {Function} Express middleware function
+ * Factory: pass in an array of express-validator chains,
+ * get back a middleware function.
  */
-const validate = (validations) => {
+function validateRequest(validations) {
   return async (req, res, next) => {
-    // Run all validations
-    await Promise.all(validations.map(validation => validation.run(req)));
-    
-    // Get validation errors
+    await Promise.all(validations.map((v) => v.run(req)));
     const errors = validationResult(req);
-    
-    if (errors.isEmpty()) {
-      return next();
-    }
+    if (errors.isEmpty()) return next();
 
-    // Format validation errors
-    const formattedErrors = errors.array().map(error => ({
-      field: error.path,
-      message: error.msg
+    const formatted = errors.array().map((err) => ({
+      field: err.path,
+      message: err.msg,
     }));
-
-    // Return validation error response
     return res.status(httpStatus.BAD_REQUEST).json({
       status: 'error',
       message: 'Validation error',
-      errors: formattedErrors
+      errors: formatted,
     });
   };
-};
+}
 
 module.exports = {
-  validate
+  validateRequest,
 };
