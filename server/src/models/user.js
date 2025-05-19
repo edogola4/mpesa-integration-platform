@@ -1,4 +1,5 @@
 // server/src/models/user.js
+// server/src/models/user.js
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
