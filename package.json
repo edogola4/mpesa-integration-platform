@@ -39,6 +39,7 @@
     },
     "homepage": "https://github.com/yourusername/mpesa-integration-platform#readme",
     "dependencies": {
-        "eslint": "^8.57.1"
+        "eslint": "^8.57.1",
+        "uuid": "^11.1.0"
     }
 }
