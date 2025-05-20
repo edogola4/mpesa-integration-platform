@@ -1,8 +1,7 @@
 // server/src/app.js
 /**
- * Main Application Server
- * Enhanced with modern JavaScript patterns, security features, and performance optimizations
- * for the M-Pesa Integration Platform
+ * Main Application Setup
+ * Configures the Express application without starting the server
  */
 
 'use strict';
@@ -15,11 +14,9 @@ const morgan = require('morgan');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
 const compression = require('compression');
-const { promisify } = require('util');
 const { v4: uuidv4 } = require('uuid');
 
 // Custom modules
-const connectDB = require('./utils/db');
 const config = require('./config');
 const logger = require('./utils/logger');
 const { errorHandler } = require('./middleware/errorHandler');
@@ -39,21 +36,6 @@ const userRoutes = require('./routes/user.routes');
 
 // Initialize Express app
 const app = express();
-
-/**
- * Database Connection
- * Using an IIFE to handle async connection with proper error handling
- */
-(async () => {
-  try {
-    await connectDB();
-    logger.info('Database connection established successfully');
-  } catch (error) {
-    logger.error(`Database connection failed: ${error.message}`);
-    // Don't exit immediately to allow logging to complete
-    setTimeout(() => process.exit(1), 1000);
-  }
-})();
 
 /**
  * Simple Request ID middleware
@@ -199,82 +181,5 @@ app.use(notFound);
 
 // Global error handler
 app.use(errorHandler);
-
-/**
- * Server Configuration
- */
-const PORT = config.port || 3000;
-
-// Create HTTP server with graceful shutdown capability
-const server = app.listen(PORT, () => {
-  logger.info(`M-Pesa Integration Platform server running in ${config.env || 'development'} mode on port ${PORT}`);
-});
-
-/**
- * Process Event Handlers
- */
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (err) => {
-  logger.error('Unhandled Promise Rejection:', err);
-  // Graceful shutdown
-  gracefulShutdown();
-});
-
-// Handle uncaught exceptions
-process.on('uncaughtException', (err) => {
-  logger.error('Uncaught Exception:', err);
-  // Graceful shutdown
-  gracefulShutdown();
-});
-
-// Handle SIGTERM signal
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM received. Shutting down gracefully');
-  gracefulShutdown();
-});
-
-// Handle SIGINT signal (Ctrl+C)
-process.on('SIGINT', () => {
-  logger.info('SIGINT received. Shutting down gracefully');
-  gracefulShutdown();
-});
-
-/**
- * Graceful shutdown function
- * Ensure all connections are properly closed before exiting
- */
-function gracefulShutdown() {
-  logger.info('Starting graceful shutdown...');
-  
-  // Set a timeout to force shutdown if graceful shutdown takes too long
-  const forceShutdownTimeout = setTimeout(() => {
-    logger.error('Forced shutdown after timeout');
-    process.exit(1);
-  }, 30000); // 30 seconds
-  
-  server.close(async () => {
-    logger.info('HTTP server closed');
-    
-    try {
-      // Close database connection if available
-      const mongoose = require('mongoose');
-      if (mongoose.connection.readyState === 1) {
-        await mongoose.connection.close();
-        logger.info('Database connection closed');
-      }
-      
-      // Add any other cleanup tasks here
-      
-      // Clear the force shutdown timeout
-      clearTimeout(forceShutdownTimeout);
-      
-      logger.info('Graceful shutdown completed');
-      process.exit(0);
-    } catch (err) {
-      logger.error('Error during cleanup:', err);
-      process.exit(1);
-    }
-  });
-}
 
 module.exports = app;
