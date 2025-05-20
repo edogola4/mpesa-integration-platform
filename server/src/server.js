@@ -2,19 +2,26 @@
  * Server Entry Point
  * Responsible for database connection, starting the server, and handling process events
  */
-
 'use strict';
 
 const mongoose = require('mongoose');
+const dotenv = require('dotenv');
+const path = require('path');
 const app = require('./app');
 const config = require('./config');
 const logger = require('./utils/logger');
+
+// Ensure environment variables are loaded
+dotenv.config();
 
 /**
  * Connect to MongoDB
  */
 const connectDB = async () => {
   try {
+    // Get MongoDB URI from environment or use fallback
+    const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/mpesa-platform';
+    
     const mongoOptions = {
       useNewUrlParser: true,
       useUnifiedTopology: true,
@@ -23,8 +30,11 @@ const connectDB = async () => {
       socketTimeoutMS: 45000, // Close sockets after 45s of inactivity
       family: 4 // Use IPv4, skip trying IPv6
     };
-
-    await mongoose.connect(config.mongodbUri, mongoOptions);
+    
+    // Debug info
+    logger.info(`Attempting to connect to MongoDB with URI: ${mongoUri}`);
+    
+    await mongoose.connect(mongoUri, mongoOptions);
     logger.info('Connected to MongoDB successfully');
   } catch (err) {
     logger.error(`MongoDB connection error: ${err.message}`);
@@ -57,7 +67,7 @@ const gracefulShutdown = async (signal, exitCode = 0) => {
     logger.error('Forced shutdown after timeout');
     process.exit(1);
   }, 30000); // 30 seconds
-
+  
   try {
     // Close HTTP server first
     await new Promise((resolve, reject) => {
@@ -80,7 +90,6 @@ const gracefulShutdown = async (signal, exitCode = 0) => {
     
     // Clear the force shutdown timeout
     clearTimeout(forceShutdownTimeout);
-    
     logger.info('Graceful shutdown completed');
     process.exit(exitCode);
   } catch (err) {
@@ -92,7 +101,6 @@ const gracefulShutdown = async (signal, exitCode = 0) => {
 /**
  * Process Event Handlers
  */
-
 // Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
   logger.error(`UNCAUGHT EXCEPTION: ${err.name}: ${err.message}`);

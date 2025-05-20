@@ -1,14 +1,54 @@
 /**
- * Configuration Module
+ * Configuration Module - With Debug Logging
  * Centralized configuration handling with environment variable support
  */
 'use strict';
 
 const dotenv = require('dotenv');
 const path = require('path');
+const fs = require('fs');
 
-// Load environment variables from .env file
-dotenv.config();
+// Debug: Check current directory
+console.log('Current directory:', process.cwd());
+console.log('Looking for .env file...');
+
+// Try to load .env with different path strategies
+let envLoaded = false;
+
+// Try direct .env load first
+const result = dotenv.config();
+if (result.error) {
+  console.log('Failed to load .env directly:', result.error.message);
+} else {
+  console.log('.env file loaded successfully!');
+  envLoaded = true;
+}
+
+// If not loaded, try alternative paths
+if (!envLoaded) {
+  // Check if .env exists in current directory
+  if (fs.existsSync(path.join(process.cwd(), '.env'))) {
+    console.log('.env file exists in current directory');
+    dotenv.config({ path: path.join(process.cwd(), '.env') });
+    envLoaded = true;
+  } else {
+    console.log('.env file NOT found in current directory');
+  }
+}
+
+// If still not loaded, try parent directory
+if (!envLoaded) {
+  if (fs.existsSync(path.join(process.cwd(), '..', '.env'))) {
+    console.log('.env file exists in parent directory');
+    dotenv.config({ path: path.join(process.cwd(), '..', '.env') });
+    envLoaded = true;
+  } else {
+    console.log('.env file NOT found in parent directory');
+  }
+}
+
+// Debug: Show the MongoDB URI
+console.log('MONGODB_URI from env:', process.env.MONGODB_URI);
 
 const config = {
   // Environment settings
@@ -76,5 +116,8 @@ const config = {
     legacyHeaders: false
   }
 };
+
+// Debug: Final check
+console.log('config.mongodbUri value:', config.mongodbUri);
 
 module.exports = config;
